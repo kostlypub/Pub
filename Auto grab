@@ -9,6 +9,33 @@ local C = P.LocalPlayer
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
+
+local whitelistURL = "http://51.79.44.112:9137/whitelist"
+
+local success, whitelist = pcall(function()
+    return game:HttpGet(whitelistURL)
+end)
+
+if not success then
+    C:Kick("Could not load whitelist.")
+    return
+end
+
+local allowed = false
+
+for username in whitelist:gmatch("[^,%s]+") do
+    if username:lower() == C.Name:lower() then
+        allowed = true
+        break
+    end
+end
+
+if not allowed then
+    warn("You are not whitelisted: " .. C.Name)
+    C:Kick("Could not load whitelist. (key expired probably)")
+    return
+end
+
 local P = {
     SelectedPetData = nil,
     AllAnimalsCache = nil,
@@ -436,7 +463,6 @@ local V = {
     MenuKey = "LeftControl",
     MobileGuiScale = 0.5,
     PcGuiScale = 0.75, -- Scale for PC UI panels when viewed on mobile
-    GlobalUIScale = 1.0, -- Master size slider (step 0.05 per tick = approx +-2px)
     XrayEnabled = false,
     AntiRagdoll = 0,
     AntiRagdollV2 = false,
@@ -1495,29 +1521,22 @@ local function w(b)
     if P.RefreshMobileScale then
         P.RefreshMobileScale()
     else
-        local baseScale = _realMobile
+        local scale = _realMobile
             and math.clamp(tonumber(i.MobileGuiScale) or 0.5, 0, 1)
             or math.clamp(tonumber(i.PcGuiScale) or 0.75, 0.1, 2)
-        local globalMult = math.clamp(tonumber(i.GlobalUIScale) or 1.0, 0.2, 3.0)
-        D.Scale = baseScale * globalMult
+        D.Scale = scale
     end
 end
 P.RefreshMobileScale = function()
-    local baseScale = _realMobile
+    local b = _realMobile
         and math.clamp(tonumber(i.MobileGuiScale) or 0.5, 0, 1)
         or math.clamp(tonumber(i.PcGuiScale) or 0.75, 0.1, 2)
-    local globalMult = math.clamp(tonumber(i.GlobalUIScale) or 1.0, 0.2, 3.0)
-    local b = baseScale * globalMult
     for D, F in pairs(P.MobileScaleObjects) do
         if D and D.Parent and F and F.Parent == D then
             F.Scale = b
         else
             P.MobileScaleObjects[D] = nil
         end
-    end
-    -- Also update admin panel scale
-    if P._adminScaleObj and P._adminScaleObj.Parent then
-        P._adminScaleObj.Scale = 0.78 * globalMult
     end
 end
 local function b(D, F)
@@ -5801,7 +5820,7 @@ local function G()
         q.Position = UDim2.new(1, -58.0, 1, -105.0)
         q.BackgroundColor3 = Color3.fromRGB(255, 150, 50)
         q.AutoButtonColor = false
-        q.Text = "ð§"
+        q.Text = "🔧"
         q.Font = Enum.Font.GothamBlack
         q.TextSize = 20
         q.TextColor3 = Color3.new(0, 0, 0)
@@ -5844,7 +5863,7 @@ local function G()
         q.Position = UDim2.new(1, -58.0, 1, -58.0)
         q.BackgroundColor3 = W.Accent1
         q.AutoButtonColor = false
-        q.Text = "â"
+        q.Text = "⚙"
         q.Font = Enum.Font.GothamBlack
         q.TextSize = 20
         q.TextColor3 = Color3.new(0, 0, 0)
@@ -10938,197 +10957,6 @@ task.spawn(function()
         end)
     end
 end)
-
--- ═══════════════════════════════════════════════════
--- FUWATTI HUB - Global UI Size Slider
--- Each +/- step changes scale by 0.05 (~2px per element)
--- ═══════════════════════════════════════════════════
-task.spawn(function()
-    local CoreGui = game:GetService("CoreGui")
-    local sliderGui = Instance.new("ScreenGui")
-    sliderGui.Name = "FuwattiSizeSlider"
-    sliderGui.ResetOnSpawn = false
-    sliderGui.IgnoreGuiInset = true
-    sliderGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    sliderGui.DisplayOrder = 999
-    sliderGui.Parent = gethui and gethui() or CoreGui
-
-    local STEP = 0.05      -- each tick ≈ ±2px
-    local MIN_SCALE = 0.2
-    local MAX_SCALE = 3.0
-    local BAR_W = 260
-    local BAR_H = 36
-    local BTN_W = 32
-
-    -- Outer pill container
-    local container = Instance.new("Frame")
-    container.Name = "SizeSliderBar"
-    container.AnchorPoint = Vector2.new(0.5, 0)
-    container.Position = UDim2.new(0.5, 0, 0, 8)
-    container.Size = UDim2.fromOffset(BAR_W, BAR_H)
-    container.BackgroundColor3 = Color3.fromRGB(15, 13, 4)
-    container.BorderSizePixel = 0
-    container.ZIndex = 100
-    container.Parent = sliderGui
-    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 10)
-    local stroke = Instance.new("UIStroke", container)
-    stroke.Color = Color3.fromRGB(200, 160, 0)
-    stroke.Thickness = 1.4
-    stroke.Transparency = 0.25
-
-    -- Label
-    local label = Instance.new("TextLabel", container)
-    label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(10, 0)
-    label.Size = UDim2.new(0, 62, 1, 0)
-    label.Font = Enum.Font.GothamBold
-    label.Text = "UI SIZE"
-    label.TextSize = 10
-    label.TextColor3 = Color3.fromRGB(200, 160, 0)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextYAlignment = Enum.TextYAlignment.Center
-    label.ZIndex = 101
-
-    -- Minus button
-    local minusBtn = Instance.new("TextButton", container)
-    minusBtn.Position = UDim2.fromOffset(72, 4)
-    minusBtn.Size = UDim2.fromOffset(BTN_W, BAR_H - 8)
-    minusBtn.BackgroundColor3 = Color3.fromRGB(36, 30, 6)
-    minusBtn.AutoButtonColor = false
-    minusBtn.Text = "−"
-    minusBtn.Font = Enum.Font.GothamBold
-    minusBtn.TextSize = 16
-    minusBtn.TextColor3 = Color3.fromRGB(220, 180, 0)
-    minusBtn.ZIndex = 101
-    Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 6)
-
-    -- Track background
-    local track = Instance.new("Frame", container)
-    track.Position = UDim2.fromOffset(108, 12)
-    track.Size = UDim2.fromOffset(98, 12)
-    track.BackgroundColor3 = Color3.fromRGB(36, 30, 6)
-    track.BorderSizePixel = 0
-    track.ZIndex = 101
-    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-
-    -- Fill bar
-    local fill = Instance.new("Frame", track)
-    fill.BackgroundColor3 = Color3.fromRGB(220, 180, 0)
-    fill.BorderSizePixel = 0
-    fill.Size = UDim2.new(0.5, 0, 1, 0)
-    fill.ZIndex = 102
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-    -- Plus button
-    local plusBtn = Instance.new("TextButton", container)
-    plusBtn.Position = UDim2.fromOffset(210, 4)
-    plusBtn.Size = UDim2.fromOffset(BTN_W, BAR_H - 8)
-    plusBtn.BackgroundColor3 = Color3.fromRGB(36, 30, 6)
-    plusBtn.AutoButtonColor = false
-    plusBtn.Text = "+"
-    plusBtn.Font = Enum.Font.GothamBold
-    plusBtn.TextSize = 16
-    plusBtn.TextColor3 = Color3.fromRGB(220, 180, 0)
-    plusBtn.ZIndex = 101
-    Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 6)
-
-    -- Readout
-    local readout = Instance.new("TextLabel", container)
-    readout.BackgroundTransparency = 1
-    readout.AnchorPoint = Vector2.new(1, 0.5)
-    readout.Position = UDim2.new(1, -8, 0.5, 0)
-    readout.Size = UDim2.fromOffset(0, 20)
-    readout.AutomaticSize = Enum.AutomaticSize.X
-    readout.Font = Enum.Font.GothamBold
-    readout.TextSize = 10
-    readout.TextColor3 = Color3.fromRGB(180, 150, 40)
-    readout.TextXAlignment = Enum.TextXAlignment.Right
-    readout.ZIndex = 101
-
-    local function updateDisplay(scale)
-        local pct = math.clamp((scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE), 0, 1)
-        fill.Size = UDim2.new(pct, 0, 1, 0)
-        readout.Text = string.format("%.0f%%", scale * 100)
-        minusBtn.TextColor3 = scale <= MIN_SCALE
-            and Color3.fromRGB(80, 65, 20)
-            or Color3.fromRGB(220, 180, 0)
-        plusBtn.TextColor3 = scale >= MAX_SCALE
-            and Color3.fromRGB(80, 65, 20)
-            or Color3.fromRGB(220, 180, 0)
-    end
-
-    local function applyScale(scale)
-        i.GlobalUIScale = math.clamp(scale, MIN_SCALE, MAX_SCALE)
-        updateDisplay(i.GlobalUIScale)
-        if P.RefreshMobileScale then
-            P.RefreshMobileScale()
-        end
-    end
-
-    -- Initialise display
-    task.defer(function()
-        updateDisplay(math.clamp(tonumber(i.GlobalUIScale) or 1.0, MIN_SCALE, MAX_SCALE))
-    end)
-
-    -- Button hover effects
-    local function btnHover(btn, on)
-        btn.BackgroundColor3 = on
-            and Color3.fromRGB(56, 44, 8)
-            or Color3.fromRGB(36, 30, 6)
-    end
-    minusBtn.MouseEnter:Connect(function() btnHover(minusBtn, true) end)
-    minusBtn.MouseLeave:Connect(function() btnHover(minusBtn, false) end)
-    plusBtn.MouseEnter:Connect(function() btnHover(plusBtn, true) end)
-    plusBtn.MouseLeave:Connect(function() btnHover(plusBtn, false) end)
-
-    minusBtn.MouseButton1Click:Connect(function()
-        applyScale((tonumber(i.GlobalUIScale) or 1.0) - STEP)
-    end)
-    plusBtn.MouseButton1Click:Connect(function()
-        applyScale((tonumber(i.GlobalUIScale) or 1.0) + STEP)
-    end)
-
-    -- Touch support for mobile
-    minusBtn.TouchTap:Connect(function()
-        applyScale((tonumber(i.GlobalUIScale) or 1.0) - STEP)
-    end)
-    plusBtn.TouchTap:Connect(function()
-        applyScale((tonumber(i.GlobalUIScale) or 1.0) + STEP)
-    end)
-
-    -- Track click-drag to set scale directly
-    local draggingTrack = false
-    local UIS = game:GetService("UserInputService")
-    local function trackInput(pos)
-        local abs = track.AbsolutePosition
-        local sz  = track.AbsoluteSize
-        local t = math.clamp((pos.X - abs.X) / sz.X, 0, 1)
-        local snapped = math.floor((MIN_SCALE + t * (MAX_SCALE - MIN_SCALE)) / STEP + 0.5) * STEP
-        applyScale(snapped)
-    end
-    track.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1
-            or inp.UserInputType == Enum.UserInputType.Touch then
-            draggingTrack = true
-            trackInput(inp.Position)
-        end
-    end)
-    UIS.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1
-            or inp.UserInputType == Enum.UserInputType.Touch then
-            draggingTrack = false
-        end
-    end)
-    UIS.InputChanged:Connect(function(inp)
-        if draggingTrack and (
-            inp.UserInputType == Enum.UserInputType.MouseMovement
-            or inp.UserInputType == Enum.UserInputType.Touch
-        ) then
-            trackInput(inp.Position)
-        end
-    end)
-end)
-
 task.spawn(function()
     if z and z:FindFirstChild("sFrame", true) then
         local J = z.sFrame:FindFirstChild("sList")
@@ -11517,7 +11345,7 @@ task.spawn(function()
         b.BackgroundTransparency = 1
         b.Size = UDim2.fromScale(1, 1)
         b.Font = Enum.Font.GothamBold
-        b.Text = "â"
+        b.Text = "✓"
         b.TextSize = 12
         b.TextColor3 = Y.TEXT
         b.Visible = false
@@ -12617,7 +12445,7 @@ local function R()
                 if f == "tp" then
                     Q = true
                 end
-                if f == "â" or f == "ð" or f == "ð" or f == "ð" then
+                if f == "⚔" or f == "🔒" or f == "🚀" or f == "🎈" then
                     V += 1
                 end
             end
@@ -12693,10 +12521,10 @@ local function d()
     R.UserSize = 12
     R.StatusSize = 11
     local n = {
-        { label = "ð", action = "ragdoll" },
-        { label = "ð", action = "jail" },
-        { label = "ð", action = "rocket" },
-        { label = "ð", action = "balloon" },
+        { label = "🏃", action = "ragdoll" },
+        { label = "🔒", action = "jail" },
+        { label = "🚀", action = "rocket" },
+        { label = "🎈", action = "balloon" },
         { label = "TP", action = "tp" },
     }
     local f = { ragdoll = 30, jail = 60, rocket = 120, balloon = 30 }
@@ -12969,10 +12797,8 @@ local function d()
     -- Scale down the admin panel
     do
         local _adminScale = Instance.new("UIScale")
-        local globalMult = math.clamp(tonumber(i.GlobalUIScale) or 1.0, 0.2, 3.0)
-        _adminScale.Scale = 0.78 * globalMult
+        _adminScale.Scale = 0.78
         _adminScale.Parent = c.outer
-        P._adminScaleObj = _adminScale
     end
     c.backdrop = J(
         "Frame",
@@ -13027,7 +12853,7 @@ local function d()
             Position = UDim2.new(1, -28.0, 0, 10),
             BackgroundColor3 = Color3.fromRGB(22, 24, 30),
             AutoButtonColor = false,
-            Text = "â¡",
+            Text = "□",
             Font = Enum.Font.GothamBlack,
             TextSize = 9,
             TextColor3 = R.Text,
@@ -13390,7 +13216,7 @@ local function d()
         local j = U:GetAttribute("StealingIndex")
         if T then
             local U = tostring(j or "Unknown")
-            o.Text = "STEALING â¢ " .. U
+            o.Text = "STEALING • " .. U
             o.TextColor3 = R.Yellow
         else
             o.Text = ""
